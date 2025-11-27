@@ -472,3 +472,247 @@
                 } catch(e) {
                     console.error("Error starting game:", e);
                     this.showScreen('menu-screen');
+                    alert("Game initialization failed. Is database.js loaded?");
+                }
+            },
+
+            restart: function() {
+                this.showScreen('menu-screen');
+            },
+
+            giveUp: function() {
+                const path = this.engine.findShortestPath(this.engine.currentActor, this.engine.targetActor);
+                this.showEndScreen(false, path);
+            },
+            
+            gameOverSuperfan: function(fakeActor, movieTitle) {
+                const title = document.getElementById('end-title');
+                const msg = document.getElementById('end-message');
+                const icon = document.getElementById('end-icon');
+                const solutionBox = document.getElementById('solution-display');
+                
+                this.showScreen('end-screen');
+                
+                title.innerText = "WRONG!";
+                title.className = "text-6xl mb-2 text-red-500 font-bebas glow-text";
+                msg.innerHTML = `<span class="text-white font-bold">${fakeActor}</span> was NOT in <br><span class="text-yellow-400">${movieTitle}</span>!`;
+                icon.innerHTML = `<i data-lucide="skull" class="w-20 h-20 text-red-500 mx-auto animate-pulse"></i>`;
+                
+                solutionBox.classList.add('hidden'); // Hide solution on wrong guess
+                updateIcons();
+            },
+
+            updateHeader: function() {
+                document.getElementById('start-actor').innerText = this.engine.startActor;
+                document.getElementById('target-actor').innerText = this.engine.targetActor;
+                const degrees = Math.floor(this.engine.path.length / 2);
+                document.getElementById('degrees-count').innerText = degrees;
+            },
+
+            renderChain: function() {
+                const container = document.getElementById('chain-container');
+                container.innerHTML = '';
+
+                this.engine.path.forEach((node, index) => {
+                    const el = document.createElement('div');
+                    el.className = 'chain-node fade-in p-3 rounded border border-gray-800 flex items-center gap-3 shadow-sm';
+                    
+                    if (node.type === 'actor') {
+                        el.classList.add('bg-zinc-900');
+                        el.innerHTML = `<i data-lucide="user" class="w-4 h-4 text-blue-400"></i> <span class="font-bold text-white">${node.name}</span>`;
+                    } else {
+                        el.classList.add('bg-zinc-800', 'ml-6', 'border-yellow-900/30');
+                        el.innerHTML = `<i data-lucide="film" class="w-4 h-4 text-yellow-500"></i> <span class="text-yellow-500 tracking-wider font-bebas text-lg">${node.name}</span>`;
+                    }
+                    container.appendChild(el);
+                });
+                updateIcons();
+                
+                const main = document.querySelector('main');
+                main.scrollTop = main.scrollHeight;
+            },
+
+            askForMovie: function() {
+                const current = this.engine.currentActor;
+                document.getElementById('prompt-text').innerText = `Step ${Math.floor(this.engine.path.length / 2) + 1}: How is ${current} connected?`;
+                document.getElementById('current-entity-display').innerText = current;
+                document.getElementById('current-entity-display').className = "text-3xl mb-6 font-bold text-white actor-name glow-text";
+
+                const movies = this.engine.getMoviesForCurrent();
+                const list = document.getElementById('options-list');
+                list.innerHTML = '';
+
+                if (movies.length === 0) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-option w-full text-left p-4 rounded text-red-400 font-bold border border-red-900';
+                    btn.innerHTML = `<div class="flex items-center gap-2"><i data-lucide="alert-circle" class="w-4 h-4"></i> No movies in database... Dead end!</div>`;
+                    btn.onclick = () => this.giveUp();
+                    list.appendChild(btn);
+                } else {
+                    movies.forEach(m => {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn-option w-full text-left p-4 rounded text-gray-300 font-bold flex items-center gap-2';
+                        btn.innerHTML = `<i data-lucide="film" class="w-4 h-4 text-gray-500"></i> ${m.title}`;
+                        btn.onclick = () => this.selectMovie(m);
+                        list.appendChild(btn);
+                    });
+                }
+                updateIcons();
+            },
+
+            selectMovie: function(movie) {
+                this.engine.path.push({type: 'movie', name: movie.title});
+                this.renderChain();
+                this.askForActor(movie);
+            },
+
+            askForActor: function(movie) {
+                document.getElementById('prompt-text').innerText = `Who was in ${movie.title}?`;
+                document.getElementById('current-entity-display').innerText = movie.title;
+                document.getElementById('current-entity-display').className = "text-3xl mb-6 font-bold text-yellow-400 movie-title tracking-wider glow-text";
+
+                let actors = this.engine.getActorsForMovie(movie.title);
+                
+                // --- SUPERFAN MODE LOGIC ---
+                if (this.mode === 'superfan') {
+                    // Add 3 fake actors
+                    // We exclude existing actors in the movie + the current actor we just came from
+                    const exclude = [...movie.cast, this.engine.currentActor];
+                    const decoys = this.engine.getDecoyActors(exclude, 3);
+                    actors = actors.concat(decoys);
+                    
+                    // Shuffle array
+                    for (let i = actors.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [actors[i], actors[j]] = [actors[j], actors[i]];
+                    }
+                }
+                // ---------------------------
+
+                const list = document.getElementById('options-list');
+                list.innerHTML = '';
+
+                actors.forEach(actorName => {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-option actor w-full text-left p-4 rounded text-gray-300 font-bold flex items-center gap-2';
+                    btn.innerHTML = `<i data-lucide="user" class="w-4 h-4 text-gray-500"></i> ${actorName}`;
+                    // Pass movie title for validation
+                    btn.onclick = () => this.selectActor(actorName, movie.title);
+                    list.appendChild(btn);
+                });
+                updateIcons();
+            },
+
+            selectActor: function(actorName, currentMovieTitle) {
+                // Check if Superfan Impostor Selection
+                if (this.mode === 'superfan') {
+                    const isValid = this.engine.isActorInMovie(actorName, currentMovieTitle);
+                    if (!isValid) {
+                        this.gameOverSuperfan(actorName, currentMovieTitle);
+                        return;
+                    }
+                }
+
+                this.engine.currentActor = actorName;
+                this.engine.path.push({type: 'actor', name: actorName});
+                this.updateHeader();
+                this.renderChain();
+
+                if (actorName === this.engine.targetActor) {
+                    this.showEndScreen(true);
+                } 
+                else if (this.engine.path.length / 2 >= 6) {
+                    this.showEndScreen(false);
+                } 
+                else {
+                    this.askForMovie();
+                }
+            },
+
+            showEndScreen: function(victory, solutionPath = null) {
+                this.showScreen('end-screen');
+                
+                const title = document.getElementById('end-title');
+                const msg = document.getElementById('end-message');
+                const icon = document.getElementById('end-icon');
+                const solutionBox = document.getElementById('solution-display');
+                const solutionList = document.getElementById('solution-steps');
+
+                if (victory) {
+                    title.innerText = "LINKED!";
+                    title.className = "text-6xl mb-2 text-yellow-400 font-bebas glow-text";
+                    msg.innerText = `You connected them in ${Math.floor(this.engine.path.length / 2)} degrees.`;
+                    icon.innerHTML = `<i data-lucide="trophy" class="w-20 h-20 text-yellow-400 mx-auto animate-bounce"></i>`;
+                    solutionBox.classList.add('hidden');
+                } else {
+                    title.innerText = "CUT!";
+                    title.className = "text-6xl mb-2 text-red-500 font-bebas glow-text";
+                    msg.innerText = solutionPath ? "Here is the connection you missed:" : "You ran out of tape (6 degrees max).";
+                    icon.innerHTML = `<i data-lucide="clapperboard" class="w-20 h-20 text-red-500 mx-auto"></i>`;
+                    
+                    if (!solutionPath) {
+                       solutionPath = this.engine.findShortestPath(this.engine.path[0].name, this.engine.targetActor);
+                    }
+
+                    if (solutionPath) {
+                        solutionBox.classList.remove('hidden');
+                        solutionBox.classList.add('block');
+                        solutionList.innerHTML = '';
+                        
+                        for(let i=0; i<solutionPath.length; i++) {
+                            const nodeStr = solutionPath[i];
+                            const parts = nodeStr.split(':');
+                            const type = parts[0];
+                            const val = parts[1];
+                            const li = document.createElement('li');
+                            
+                            if(type === 'Actor') {
+                                if(i > 0) {
+                                    const arrow = document.createElement('div');
+                                    arrow.className = "text-center text-gray-600 my-1";
+                                    arrow.innerHTML = `<i data-lucide="arrow-down" class="w-4 h-4 mx-auto"></i>`;
+                                    solutionList.appendChild(arrow);
+                                }
+                                li.innerHTML = `<div class="bg-zinc-900 p-2 rounded border border-zinc-700 flex items-center gap-2"><i data-lucide="user" class="w-3 h-3 text-blue-400"></i> <span class="font-bold text-white">${val}</span></div>`;
+                            } else {
+                                const arrow = document.createElement('div');
+                                arrow.className = "text-center text-gray-600 my-1";
+                                arrow.innerHTML = `<i data-lucide="arrow-down" class="w-4 h-4 mx-auto"></i>`;
+                                solutionList.appendChild(arrow);
+                                li.innerHTML = `<div class="bg-zinc-800 p-2 rounded border border-yellow-900/30 flex items-center gap-2"><i data-lucide="film" class="w-3 h-3 text-yellow-500"></i> <span class="text-yellow-500 font-bebas tracking-wide">${val}</span></div>`;
+                            }
+                            solutionList.appendChild(li);
+                        }
+                    }
+                }
+                updateIcons();
+            }
+        };
+
+        function toggleDBInfo() {
+            const el = document.getElementById('db-info');
+            
+            if(window.game && window.game.engine) {
+                 const movieCount = window.game.engine.db.length;
+                 const actorCount = window.game.engine.actors.size;
+                 document.getElementById('stat-movies').innerText = movieCount;
+                 document.getElementById('stat-actors').innerText = actorCount;
+            }
+
+            if (el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+                el.style.display = 'block';
+            } else {
+                el.classList.add('hidden');
+                el.style.display = 'none';
+            }
+        }
+
+        window.game = game;
+        // Start engine after DOM loads
+        window.addEventListener('load', () => {
+            window.game.init();
+        });
+    </script>
+</body>
+</html>
