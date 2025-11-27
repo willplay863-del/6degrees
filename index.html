@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>6 Degrees: Party Edition</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@300;400;600&display=swap');
+
+        :root {
+            --neon-gold: #ffd700;
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --neon-red: #ff0055;
+            --bg-dark: #050505;
+            --card-bg: #111;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Montserrat', sans-serif;
+            overflow-x: hidden;
+        }
+
+        h1, h2, .movie-title, .actor-name {
+            font-family: 'Bebas Neue', sans-serif;
+            letter-spacing: 1px;
+        }
+
+        /* STRICT VISIBILITY CONTROLS */
+        .screen-section {
+            display: none !important; /* Default hidden */
+        }
+        
+        .screen-section.active {
+            display: flex !important; /* Force flex when active */
+        }
+
+        .glow-text {
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .game-card {
+            background: var(--card-bg);
+            border: 1px solid #222;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .game-card:hover {
+            border-color: var(--neon-gold);
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #ffd700, #ffaa00);
+            color: black;
+            font-weight: bold;
+            text-transform: uppercase;
+            clip-path: polygon(10% 0, 100% 0, 100% 80%, 90% 100%, 0 100%, 0 20%);
+            transition: all 0.2s;
+            cursor: pointer;
+            user-select: none;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            filter: brightness(1.1);
+            box-shadow: 0 0 25px rgba(255, 215, 0, 0.5);
+        }
+
+        .btn-primary:active {
+            transform: translateY(1px);
+        }
+
+        .btn-option {
+            background: #1a1a1a;
+            border-left: 4px solid #333;
+            transition: all 0.2s;
+        }
+
+        .btn-option:hover {
+            background: #2a2a2a;
+            border-left-color: var(--neon-blue);
+            padding-left: 1.5rem;
+        }
+        
+        .btn-option.actor:hover {
+             border-left-color: var(--neon-pink);
+        }
+
+        /* Mode Selector Styles */
+        .mode-btn {
+            opacity: 0.5;
+            transform: scale(0.95);
+            transition: all 0.3s;
+            border: 1px solid transparent;
+        }
+        .mode-btn.selected {
+            opacity: 1;
+            transform: scale(1);
+            background: #222;
+            border-color: var(--neon-gold);
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+        }
+        .mode-btn.selected h3 {
+            color: var(--neon-gold);
+        }
+
+        .chain-node {
+            position: relative;
+        }
+        
+        .chain-node::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            width: 2px;
+            height: 20px;
+            background: #333;
+            transform: translateX(-50%);
+        }
+
+        .chain-node:last-child::after {
+            display: none;
+        }
+
+        /* Animation for new content */
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+            opacity: 0;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="p-4 border-b border-gray-800 flex justify-between items-center bg-black/80 backdrop-blur-md sticky top-0 z-50 shadow-lg">
+        <div class="flex items-center gap-2">
+            <i data-lucide="link" class="text-yellow-400 w-6 h-6"></i>
+            <span class="text-2xl text-yellow-400 tracking-widest font-bebas">6 <span class="text-white">DEGREES</span></span>
+        </div>
+        <div class="flex gap-4 text-sm font-bold items-center">
+             <div id="mode-badge" class="hidden md:block text-[10px] uppercase px-2 py-1 rounded bg-gray-800 text-gray-400 border border-gray-700">Normal</div>
+            <div class="text-blue-400">DEGREES: <span id="degrees-count" class="text-white">0</span>/6</div>
+        </div>
+    </header>
+
+    <!-- Main Game Area -->
+    <main class="flex-grow p-4 max-w-2xl mx-auto w-full flex flex-col gap-6 relative">
+        
+        <!-- Goal Display -->
+        <div class="bg-gradient-to-r from-gray-900 to-black p-4 rounded-xl border border-gray-700 flex justify-between items-center shadow-lg relative overflow-hidden">
+            <!-- Background glow effect -->
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-400 via-blue-500 to-purple-500 opacity-50"></div>
+            
+            <div class="text-center w-1/3 z-10">
+                <div class="text-[10px] text-gray-500 uppercase mb-1 tracking-widest">Start</div>
+                <div id="start-actor" class="text-lg md:text-2xl text-yellow-400 leading-none actor-name break-words">?</div>
+            </div>
+            <div class="flex flex-col items-center justify-center w-1/3 z-10">
+                <i data-lucide="arrow-right" class="text-gray-600 w-6 h-6 animate-pulse"></i>
+                <span class="text-[9px] text-gray-600 mt-1 tracking-widest uppercase">Connect To</span>
+            </div>
+            <div class="text-center w-1/3 z-10">
+                <div class="text-[10px] text-gray-500 uppercase mb-1 tracking-widest">Target</div>
+                <div id="target-actor" class="text-lg md:text-2xl text-blue-400 leading-none actor-name break-words">?</div>
+            </div>
+        </div>
+
+        <!-- Game State: Playing -->
+        <div id="game-board" class="screen-section flex-col gap-4">
+            
+            <!-- Chain History -->
+            <div id="chain-container" class="flex flex-col gap-2 pb-4">
+                <!-- Dynamic Chain Items will go here -->
+            </div>
+
+            <!-- Interaction Area -->
+            <div class="game-card p-6 rounded-xl relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-blue-500 rounded-full blur-[80px] opacity-20 pointer-events-none"></div>
+                
+                <h3 id="prompt-text" class="text-gray-400 text-xs uppercase tracking-widest mb-4 border-b border-gray-800 pb-2">
+                    Current Turn
+                </h3>
+                
+                <div id="current-entity-display" class="text-3xl mb-6 font-bold text-white actor-name">
+                    Waiting...
+                </div>
+
+                <!-- Options List -->
+                <div id="options-list" class="flex flex-col gap-2 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                    <!-- Options injected via JS -->
+                </div>
+            </div>
+            
+            <div class="flex justify-between mt-4">
+                <button onclick="window.game.giveUp()" class="text-red-500 text-xs hover:text-red-400 font-bold tracking-wider uppercase border border-red-900/50 px-4 py-2 rounded hover:bg-red-900/20 transition-colors">Give Up & Show Path</button>
+                <button onclick="window.game.restart()" class="text-gray-500 text-xs hover:text-white font-bold tracking-wider uppercase px-4 py-2">Restart</button>
+            </div>
+        </div>
+
+        <!-- Game State: Menu -->
+        <div id="menu-screen" class="screen-section active absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/95 backdrop-blur-xl p-6 text-center fade-in">
+            <div class="mb-4 relative">
+                <div class="absolute inset-0 bg-yellow-500 blur-[50px] opacity-20"></div>
+                <h1 class="text-8xl text-white mb-0 relative z-10 tracking-tighter font-bebas" style="text-shadow: 4px 4px 0px #b48600;">6 DEGREES</h1>
+                <div class="text-xl text-yellow-400 tracking-[0.6em] font-light relative z-10 uppercase">Hollywood Edition</div>
+            </div>
+            
+            <p class="text-gray-400 mb-8 text-md max-w-md font-light leading-relaxed">
+                Connect the <strong class="text-white">Start Actor</strong> to the <strong class="text-white">Target Actor</strong> through their co-stars in 6 moves or less.
+            </p>
+
+            <!-- Mode Selector -->
+            <div class="flex gap-4 mb-8 w-full max-w-md">
+                <button onclick="game.setMode('normal')" id="btn-mode-normal" class="mode-btn selected flex-1 p-4 rounded-lg bg-gray-900 border border-gray-800 flex flex-col items-center gap-2 cursor-pointer">
+                    <i data-lucide="film" class="text-blue-400 w-6 h-6"></i>
+                    <h3 class="font-bold text-white tracking-wider">NORMAL</h3>
+                    <span class="text-[10px] text-gray-500">Standard Connections</span>
+                </button>
+                <button onclick="game.setMode('superfan')" id="btn-mode-superfan" class="mode-btn flex-1 p-4 rounded-lg bg-gray-900 border border-gray-800 flex flex-col items-center gap-2 cursor-pointer">
+                    <i data-lucide="skull" class="text-red-500 w-6 h-6"></i>
+                    <h3 class="font-bold text-gray-400 tracking-wider">SUPERFAN</h3>
+                    <span class="text-[10px] text-gray-500">Includes Fake Choices</span>
+                </button>
+            </div>
+            
+            <div class="flex flex-col gap-4 w-full max-w-xs z-20">
+                <button id="start-btn" onclick="window.game.start()" class="btn-primary py-5 text-xl rounded tracking-widest">Start Game</button>
+                <button onclick="toggleDBInfo()" class="text-gray-600 text-xs hover:text-white mt-4 transition-colors">VIEW DATABASE STATS</button>
+            </div>
+            
+            <div id="db-info" class="hidden mt-6 text-xs text-gray-500 border border-gray-800 p-4 rounded bg-gray-900/50 max-w-sm">
+                <div class="flex justify-between mb-2 pb-2 border-b border-gray-800">
+                    <span>Unique Actors:</span>
+                    <span id="stat-actors" class="text-white">0</span>
+                </div>
+                <div class="flex justify-between mb-2">
+                    <span>Movies:</span>
+                    <span id="stat-movies" class="text-white">0</span>
+                </div>
+                <div class="text-[10px] text-gray-600 italic mt-2">
+                    Check your database.js file to add more movies!
+                </div>
+            </div>
+        </div>
+
+        <!-- Game State: Victory/Defeat Modal -->
+        <div id="end-screen" class="screen-section fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6 text-center">
+            <div id="end-icon" class="mb-4 transform scale-150"></div>
+            <h2 id="end-title" class="text-6xl mb-2 text-white tracking-tight"></h2>
+            <p id="end-message" class="text-gray-300 mb-8 text-xl font-light"></p>
+            
+            <div id="solution-display" class="hidden w-full max-w-md bg-gray-900 p-6 rounded-lg text-left text-sm text-gray-400 mb-8 max-h-60 overflow-y-auto border border-gray-800">
+                <div class="text-xs text-blue-400 uppercase mb-4 font-bold tracking-widest border-b border-gray-800 pb-2">Optimal Path Strategy</div>
+                <ul id="solution-steps" class="space-y-3"></ul>
+            </div>
+
+            <button onclick="window.game.start()" class="btn-primary py-4 px-10 text-lg rounded w-full max-w-xs tracking-wider">PLAY AGAIN</button>
+        </div>
+
+    </main>
+
+    <!-- DATABASE LOADER -->
+    <script src="database.js"></script>
+
+    <script>
+        // --- UTILS ---
+        const updateIcons = () => {
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
+            }
+        };
+
+        // --- GRAPH LOGIC ---
+
+        class GameEngine {
+            constructor() {
+                this.currentActor = null;
+                this.targetActor = null;
+                this.currentStep = 0;
+                this.path = []; 
+                this.adjacencyList = {};
+                this.allActorsList = []; // Array of all unique actors for shuffling
+                
+                // Safety check for database.js
+                if(typeof MOVIE_DB === 'undefined') {
+                    alert("Error: database.js not found! Please make sure database.js is in the same folder as this file.");
+                    this.db = [];
+                } else {
+                    this.db = MOVIE_DB;
+                }
+
+                this.buildGraph();
+            }
+
+            buildGraph() {
+                this.moviesByActor = {}; 
+                this.actors = new Set();
+
+                this.db.forEach(m => {
+                    const movieNode = `Movie:${m.title}`;
+                    if (!this.adjacencyList[movieNode]) this.adjacencyList[movieNode] = [];
+
+                    m.cast.forEach(actor => {
+                        this.actors.add(actor);
+                        const actorNode = `Actor:${actor}`;
+                        if (!this.adjacencyList[actorNode]) this.adjacencyList[actorNode] = [];
+
+                        this.adjacencyList[movieNode].push(actorNode);
+                        this.adjacencyList[actorNode].push(movieNode);
+
+                        if (!this.moviesByActor[actor]) this.moviesByActor[actor] = [];
+                        this.moviesByActor[actor].push(m);
+                    });
+                });
+                this.allActorsList = Array.from(this.actors);
+            }
+
+            getRandomActor(exclude = null) {
+                if(this.allActorsList.length === 0) return "Error";
+                let choice = this.allActorsList[Math.floor(Math.random() * this.allActorsList.length)];
+                while(choice === exclude) {
+                    choice = this.allActorsList[Math.floor(Math.random() * this.allActorsList.length)];
+                }
+                return choice;
+            }
+
+            // Get random actors who are NOT in the provided list (for decoys)
+            getDecoyActors(excludeList, count = 3) {
+                const decoys = [];
+                let attempts = 0;
+                while (decoys.length < count && attempts < 100) {
+                    const r = this.getRandomActor();
+                    if (!excludeList.includes(r) && !decoys.includes(r)) {
+                        decoys.push(r);
+                    }
+                    attempts++;
+                }
+                return decoys;
+            }
+
+            findShortestPath(startName, endName) {
+                const start = `Actor:${startName}`;
+                const end = `Actor:${endName}`;
+                
+                if (!this.adjacencyList[start]) return null;
+
+                let queue = [[start]];
+                let visited = new Set();
+                visited.add(start);
+
+                while (queue.length > 0) {
+                    let path = queue.shift();
+                    let node = path[path.length - 1];
+
+                    if (node === end) return path;
+
+                    if (this.adjacencyList[node]) {
+                        for (let neighbor of this.adjacencyList[node]) {
+                            if (!visited.has(neighbor)) {
+                                visited.add(neighbor);
+                                let newPath = [...path, neighbor];
+                                queue.push(newPath);
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+
+            generateLevel() {
+                let valid = false;
+                let attempts = 0;
+                
+                while (!valid && attempts < 200) {
+                    const a = this.getRandomActor();
+                    const b = this.getRandomActor(a);
+                    const path = this.findShortestPath(a, b);
+                    
+                    if (path && path.length >= 5) { 
+                        this.startActor = a;
+                        this.targetActor = b;
+                        this.currentActor = a;
+                        this.path = [{type: 'actor', name: a}];
+                        this.currentStep = 0;
+                        valid = true;
+                    }
+                    attempts++;
+                }
+                
+                if(!valid) {
+                    // Fallback only if generation fails
+                    this.startActor = "Robert Downey Jr";
+                    this.targetActor = "Kevin Bacon";
+                    this.currentActor = this.startActor;
+                    this.path = [{type: 'actor', name: this.startActor}];
+                }
+            }
+
+            getMoviesForCurrent() {
+                return this.moviesByActor[this.currentActor] || [];
+            }
+
+            getActorsForMovie(movieTitle) {
+                const movie = this.db.find(m => m.title === movieTitle);
+                return movie ? movie.cast.filter(a => a !== this.currentActor) : [];
+            }
+
+            // New: Verify if actor is actually in movie (for Superfan mode validation)
+            isActorInMovie(actorName, movieTitle) {
+                 const movie = this.db.find(m => m.title === movieTitle);
+                 return movie && movie.cast.includes(actorName);
+            }
+        }
+
+        // --- UI CONTROLLER ---
+
+        const game = {
+            engine: null, // Initialized on load
+            mode: 'normal', // 'normal' or 'superfan'
+            
+            init: function() {
+                this.engine = new GameEngine();
+                updateIcons();
+            },
+
+            setMode: function(modeName) {
+                this.mode = modeName;
+                document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+                document.getElementById(`btn-mode-${modeName}`).classList.add('selected');
+                
+                const badge = document.getElementById('mode-badge');
+                badge.innerText = modeName;
+                if(modeName === 'superfan') {
+                    badge.classList.remove('bg-gray-800', 'text-gray-400');
+                    badge.classList.add('bg-red-900', 'text-red-200', 'border-red-700');
+                } else {
+                    badge.classList.add('bg-gray-800', 'text-gray-400');
+                    badge.classList.remove('bg-red-900', 'text-red-200', 'border-red-700');
+                }
+            },
+
+            showScreen: function(screenId) {
+                ['menu-screen', 'game-board', 'end-screen'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (id === screenId) {
+                        el.classList.add('active');
+                    } else {
+                        el.classList.remove('active');
+                    }
+                });
+            },
+
+            start: function() {
+                try {
+                    this.showScreen('game-board');
+                    this.engine.generateLevel();
+                    this.updateHeader();
+                    this.renderChain();
+                    this.askForMovie();
+                } catch(e) {
+                    console.error("Error starting game:", e);
+                    this.showScreen('menu-screen');
